@@ -35,6 +35,7 @@ The objective of this research is to conduct a rigorous comparative study across
   - [Evaluation Framework](#evaluation-framework)
     - [Quantitative Evaluation](#quantitative-evaluation)
     - [Automated Qualitative Evaluation (LLM-as-a-Judge)](#automated-qualitative-evaluation-llm-as-a-judge)
+  - [Hugging Face Hub Assets](#hugging-face-hub-assets)
   - [Installation \& Requirements](#installation--requirements)
   - [Execution Guide](#execution-guide)
   - [Results](#results)
@@ -236,6 +237,23 @@ The study relies on a validation paradigm combining automated quantitative data 
 
 ### Quantitative Evaluation
 
+The quantitative evaluation measures translations across linguistic overlap metrics (SacreBLEU, chrF2, ROUGE-L, METEOR) and semantic proximity (COMET).
+
+#### Large Language Model (LLM) Results (Prompt 0, 0-Shot)
+
+The table below summarizes the comparative performance of the base LLM architectures versus their QLoRA fine-tuned adapters on the Wuxia test set:
+
+| Model | Variant | SacreBLEU | chrF2 | ROUGE-L | METEOR | COMET |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: |
+| **Gemma 3 (27B)** | Base | 10.64 | 36.46 | 40.29 | 39.41 | 71.50 |
+| | **QLoRA Fine-tuned** | **26.28** | **48.47** | **54.54** | **54.64** | **78.59** |
+| **Llama 3.3 (70B)**| Base | 9.50 | 30.20 | 30.78 | 30.02 | 62.52 |
+| | **QLoRA Fine-tuned** | **26.12** | **48.39** | **54.16** | **54.45** | **77.94** |
+| **Qwen 3 (30B-A3B)**| Base | 9.30 | 30.10 | 31.38 | 31.12 | 61.89 |
+| | **QLoRA Fine-tuned** | **25.08** | **47.18** | **54.47** | **53.77** | **78.42** |
+| **GLM-4 (32B)** | Base | 9.57 | 36.27 | 39.47 | 38.97 | **72.49** |
+| | **QLoRA Fine-tuned** | **13.52** | **39.94** | **41.15** | **45.27** | 72.38 |
+
 * **Linguistic Proximity**: BLEU, ROUGE-L, METEOR and chrF scores
 * **Semantic Proximity**: COMET score
 * **Operational Footprint**: Inference latency, token throughput, parameter counts
@@ -244,6 +262,30 @@ The study relies on a validation paradigm combining automated quantitative data 
 
 Following the LLM-as-a-Judge paradigm, validation protocols utilize state-of-the-art closed engines (Claude 3.5 Sonnet, Gemini 1.5 Flash, OpenAI GPT-4o-mini) to analyze deep translation mechanics compared to the open source models.
 
+
+---
+
+## Hugging Face Hub Assets
+
+All datasets and fine-tuned models developed for this project are publicly available on the Hugging Face Hub:
+
+### Datasets
+* **[hsc-wuxia-full](https://huggingface.co/datasets/HSilvosa/hsc-wuxia-full)**: The complete aligned Chinese-English parallel corpus of Wuxia literature.
+* **[hsc-wuxia-100k](https://huggingface.co/datasets/HSilvosa/hsc-wuxia-100k)**: The core stratified parallel dataset containing exactly 100,000 sentence pairs used for model training and evaluation.
+
+### Fine-tuned Models
+
+#### Large Language Model (LLM) Adapters
+* **[hsc-wuxia-llama-3.3-70b](https://huggingface.co/HSilvosa/hsc-wuxia-llama-3.3-70b)**: QLoRA Adapter fine-tuned on top of `meta-llama/Llama-3.3-70B-Instruct`.
+* **[hsc-wuxia-gemma-3-27b](https://huggingface.co/HSilvosa/hsc-wuxia-gemma-3-27b)**: QLoRA Adapter fine-tuned on top of `google/gemma-3-27b-it`.
+* **[hsc-wuxia-glm-4-32b](https://huggingface.co/HSilvosa/hsc-wuxia-glm-4-32b)**: QLoRA Adapter fine-tuned on top of `zai-org/GLM-4-32B-0414`.
+* **[hsc-wuxia-qwen-3-30b-a3b](https://huggingface.co/HSilvosa/hsc-wuxia-qwen-3-30b-a3b)**: QLoRA Adapter fine-tuned on top of `Qwen/Qwen3-30B-A3B-Instruct-2507`.
+
+#### Neural Machine Translation (NMT) Models
+* **[hsc-wuxia-mbart-large-50](https://huggingface.co/HSilvosa/hsc-wuxia-mbart-large-50)**: Fine-tuned `facebook/mbart-large-50-many-to-many-mmt` translation model.
+* **[hsc-wuxia-m2m100-418m](https://huggingface.co/HSilvosa/hsc-wuxia-m2m100-418m)**: Fine-tuned `facebook/m2m100_418M` translation model.
+* **[hsc-wuxia-marianmt-zh-en](https://huggingface.co/HSilvosa/hsc-wuxia-marianmt-zh-en)**: Fine-tuned `Helsinki-NLP/opus-mt-zh-en` translation model.
+* **[hsc-wuxia-mt5-small](https://huggingface.co/HSilvosa/hsc-wuxia-mt5-small)**: Fine-tuned `google/mt5-small` translation model.
 
 ---
 
