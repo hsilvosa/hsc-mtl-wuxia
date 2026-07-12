@@ -324,3 +324,7 @@ Complete metrics and charts are available in:
 * `evaluation/` - CO2 metrics, inference times, llm results, nmt results, qualitative evaluations
 * `src\LLM\evaluation` - detailed LLM results
 * `src\NMT\evaluation` - detailed NMT results
+
+
+## Acknowledgment
+This research project was made possible through the access granted by the Galician Supercomputing Center (CESGA) to its supercomputing infrastructure. The supercomputer FinisTerrae III and its permanent data storage system have been funded by the NextGeneration EU 2021 Recovery, Transformation and Resilience Plan, ICT2021-006904, and also from the Pluriregional Operational Programme of Spain 2014-2020 of the European Regional Development Fund (ERDF), ICTS-2019-02-CESGA-3, and from the State Programme for the Promotion of Scientific and Technical Research of Excellence of the State Plan for Scientific and Technical Research and Innovation 2013-2016 State subprogramme for scientific and technical infrastructures and equipment of ERDF, CESG15-DE-3114.
