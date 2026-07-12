@@ -39,6 +39,7 @@ The objective of this research is to conduct a rigorous comparative study across
   - [Installation \& Requirements](#installation--requirements)
   - [Execution Guide](#execution-guide)
   - [Results](#results)
+  - [Acknowledgments](#Acknowledgments)
 
 
 ---
