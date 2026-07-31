@@ -17,7 +17,10 @@ ORIGINAL_DATASET_PATH = REPO_DIR / "processed_data" / "wuxia_zh_en_clean"
 
 # PARÁMETROS
 K_SAMPLES_TARGET = 100_000
-MIN_SCORE_THRESHOLD = 20.0 
+MIN_SCORE_THRESHOLD = 20.0
+LOW_QUANTILE = 1 / 3
+HIGH_QUANTILE = 2 / 3
+RANDOM_SEED = 42
 
 
 
@@ -119,34 +122,96 @@ def calculate_stats(df):
     df['mean_score'] = df[score_cols].mean(axis=1)
     
     if len(score_cols) > 1:
+        df['variance_score'] = df[score_cols].var(axis=1, ddof=1)
         df['std_score'] = df[score_cols].std(axis=1)
     else:
+        df['variance_score'] = 0.0
         df['std_score'] = 0.0
         
     return df
 
 def perform_balanced_sampling(df, k_target):
-    print(f"\nIniciando Sampling Estratificado...")
-    
-    try:
-        df['difficulty_bin'] = pd.qcut(df['mean_score'], q=3, labels=[0, 1, 2], duplicates='drop')
-        method = "qcut (Cantidad Equilibrada)"
-    except:
-        # Si falla (raro con 3 bins), usamos cut (Rango Equilibrado)
-        df['difficulty_bin'] = pd.cut(df['mean_score'], bins=3, labels=[0, 1, 2])
-        method = "cut (Rango de Notas)"
-    # num_bins = df['difficulty_bin'].nunique()
-    
-    counts = df['difficulty_bin'].value_counts()
-    print(f"   -> Distribución original disponible:\n{counts}")
-    
-    target_per_bin = int(k_target / 3)
-    print(f"   -> Objetivo: ~{target_per_bin} muestras por nivel.")
+    """
+    Selecciona los tres estratos descritos en el artículo:
 
-    # Sampling
-    grouped = df.groupby('difficulty_bin', group_keys=False)
-    df_balanced = grouped.apply(lambda x: x.sample(min(len(x), target_per_bin), random_state=42))
-    
+    * difíciles: media en el tercil inferior y varianza en el tercil inferior;
+    * intermedias: varianza en el tercil superior;
+    * fáciles: media en el tercil superior y varianza en el tercil inferior.
+
+    Los ejemplos que no cumplen ninguna de estas condiciones no se seleccionan.
+    """
+    print("\nIniciando sampling estratificado por media y varianza...")
+
+    mean_low, mean_high = df['mean_score'].quantile(
+        [LOW_QUANTILE, HIGH_QUANTILE]
+    )
+    variance_low, variance_high = df['variance_score'].quantile(
+        [LOW_QUANTILE, HIGH_QUANTILE]
+    )
+
+    print(
+        "   -> Umbrales (terciles): "
+        f"media baja <= {mean_low:.4f}, media alta >= {mean_high:.4f}, "
+        f"varianza baja <= {variance_low:.4f}, "
+        f"varianza alta >= {variance_high:.4f}"
+    )
+
+    hard_mask = (
+        (df['mean_score'] <= mean_low)
+        & (df['variance_score'] <= variance_low)
+    )
+    intermediate_mask = df['variance_score'] >= variance_high
+    easy_mask = (
+        (df['mean_score'] >= mean_high)
+        & (df['variance_score'] <= variance_low)
+    )
+
+    candidates = []
+    for difficulty_bin, mask in (
+        (0, hard_mask),
+        (1, intermediate_mask),
+        (2, easy_mask),
+    ):
+        stratum = df.loc[mask].copy()
+        stratum['difficulty_bin'] = difficulty_bin
+        candidates.append(stratum)
+
+    df_candidates = pd.concat(candidates, ignore_index=False)
+    counts = (
+        df_candidates['difficulty_bin']
+        .value_counts()
+        .reindex([0, 1, 2], fill_value=0)
+    )
+    print(f"   -> Candidatas por estrato:\n{counts}")
+    print(f"   -> Muestras fuera de los tres estratos: {len(df) - len(df_candidates)}")
+
+    if (counts == 0).any():
+        empty_bins = counts[counts == 0].index.tolist()
+        raise ValueError(
+            f"No hay muestras candidatas para los estratos {empty_bins}. "
+            "Comprueba que existan puntuaciones de varios modelos y suficiente "
+            "variación en los datos."
+        )
+
+    base_target, remainder = divmod(k_target, 3)
+    sampled_strata = []
+    for difficulty_bin in (0, 1, 2):
+        target = base_target + (1 if difficulty_bin < remainder else 0)
+        stratum = df_candidates[
+            df_candidates['difficulty_bin'] == difficulty_bin
+        ]
+        sampled_strata.append(
+            stratum.sample(
+                n=min(len(stratum), target),
+                random_state=RANDOM_SEED,
+            )
+        )
+
+    df_balanced = pd.concat(sampled_strata, ignore_index=False)
+    print(
+        f"   -> Objetivo máximo: {k_target} muestras "
+        f"(semilla {RANDOM_SEED})."
+    )
     return df_balanced
 
 def inspect_data(df_selected, raw_ds):
@@ -162,7 +227,11 @@ def inspect_data(df_selected, raw_ds):
             idx = int(row['id'])
             try:
                 item = raw_ds['train'][idx]
-                print(f"[ID: {idx}] Score: {row['mean_score']:.2f} (Bin {row['difficulty_bin']})")
+                print(
+                    f"[ID: {idx}] Media: {row['mean_score']:.2f}; "
+                    f"varianza: {row['variance_score']:.2f} "
+                    f"(Bin {row['difficulty_bin']})"
+                )
                 print(f"   ZH: {item.get('zh', '???')}")
                 print(f"   EN: {item.get('en', '???')}")
                 print("-" * 20)
@@ -185,7 +254,8 @@ def print_table_statistics(df_balanced):
             CHRF_Min=('mean_score', 'min'),
             CHRF_Max=('mean_score', 'max'),
             CHRF_Medio=('mean_score', 'mean'),
-            Desacuerdo_Modelos=('std_score', 'mean') # Esta es la varianza real
+            Varianza_Media=('variance_score', 'mean'),
+            Desviacion_Estandar_Media=('std_score', 'mean')
         )
     
     # Renombrar los índices para mayor claridad (asumiendo qcut ascendente)
