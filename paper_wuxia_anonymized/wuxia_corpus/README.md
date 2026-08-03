@@ -8,12 +8,12 @@ This project processes and aligns chapters of Chinese-English wuxia novels using
 
 ## Datasets
 
-| Dataset           | Novels                        | Chapters      | Description                                  |
-| ----------------- | ----------------------------- | ------------- | ------------------------------------------- |
-| **AWE**     | A Will Eternal                | ~1300         | Wuxia novel with Chinese-English translation |
-| **CONDOR**  | The Condor Trilogy (Jin Yong) | 3 parts       | Complete trilogy in 3 volumes                |
-| **GU**      | Reverend Insanity              | ~350k segments| Wuxia novel collection                      |
-| **ISSTH**   | I Shall Seal the Heavens       | ~900+         | Wuxia/Xianxia novel                           |
+| Dataset          | Novels                        | Chapters       | Description                                  |
+| ---------------- | ----------------------------- | -------------- | -------------------------------------------- |
+| **AWE**    | A Will Eternal               | ~1300          | Wuxia novel with Chinese-English translation |
+| **CONDOR** | The Condor Trilogy (Jin Yong) | 3 parts        | Complete trilogy in 3 volumes                |
+| **GU**     | Reverend Insanity             | ~350k segments | Wuxia novel collection                       |
+|                  |                               |                |                                              |
 
 ## Project Structure
 
@@ -36,10 +36,10 @@ wuxia_corpus/
 │       ├── utils.py          # Shared utilities
 │       └── pdf_reader.py     # PDF reader
 ├── data/
-│   ├── <novela>/
+│   ├── <novel>/
 │   │   ├── raw/        # Original unprocessed text
 │   │   ├── segmented/  # Divided chapters
-│   │   │   └── chapter/ # ch*.txt and en*.txt files
+│   │   │   └── chapter/ # ch*.txt and in*.txt files
 │   │   └── processed/  # Aligned results (final_*.txt)
 │   └── *.txt           # Pre-generated embedding files
 └── stats.txt           # Processing statistics
@@ -52,17 +52,17 @@ wuxia_corpus/
 **Chinese:**
 
 ```bash
-python -m src.preprocessing.chinese --novela awe --input awe_ch.txt --outname segmented/chapter
-python -m src.preprocessing.chinese --novela condor --input chinese_condor_1.txt --outname segmented/chapter
-python -m src.preprocessing.chinese --novela gu --input guzhenren_ch.txt --outname segmented/chapter
+python -m src.preprocessing.chinese --novel awe --input awe_ch.txt --outname segmented/chapter
+python -m src.preprocessing.chinese --novel condor --input chinese_condor_1.txt --outname segmented/chapter
+python -m src.preprocessing.chinese --novel gu --input guzhenren_ch.txt --outname segmented/chapter
 ```
 
 **English:**
 
 ```bash
-python -m src.preprocessing.english --novela awe --input awe_en.txt --outname segmented/chapter
-python -m src.preprocessing.english --novela condor --input english_condor_1.txt --outname segmented/chapter
-python -m src.preprocessing.english --novela gu --input guzhenren_en.txt --outname segmented/chapter
+python -m src.preprocessing.english --novel awe --input awe_en.txt --outname segmented/chapter
+python -m src.preprocessing.english --novel condor --input english_condor_1.txt --outname segmented/chapter
+python -m src.preprocessing.english --novel gu --input guzhenren_en.txt --outname segmented/chapter
 ```
 
 ### 2. Alignment (Chinese-English Alignment)
@@ -96,16 +96,16 @@ python -m src.analysis.similitudes
 The alignment uses normalized LaBSE embeddings and monotonic dynamic
 programming. Every N-M transition within the configured limits is considered,
 including 1-1, 1-N, N-1, 2-2, 2-3, and 3-2. Source and target skips use the
-configured `skip_penalty`. The maximum group size can be set independently for
-each language.
+configured `skip_penalty`. The default maximum group size is seven segments on
+each side and can be changed independently.
 
 ## Results (Statistics)
 
-| Corpus      | Time (s) | Chinese Seg. | English Seg. | Aligned Pairs |
-| ----------- | -------- | ------------ | ------------ | ------------- |
-| GU (Total)  | 5518.62  | 352,097      | 334,606      | 325,032       |
-| AWE (Total) | 2745.79  | 77,232       | 153,754      | 76,678        |
-| CONDOR (Total) | 2899.62 | 128,500      | 182,646      | 123,033       |
+| Corpus         | Time (s) | Chinese Seg. | English Seg. | Aligned Pairs |
+| -------------- | -------- | ------------ | ------------ | ------------- |
+| GU (Total)     | 5518.62  | 352,097      | 334,606      | 325,032       |
+| AWE (Total)    | 2745.79  | 77,232       | 153,754      | 76,678        |
+| CONDOR (Total) | 2899.62  | 128,500      | 182,646      | 123,033       |
 
 ## Output
 

@@ -12,6 +12,14 @@ from nltk.corpus import words
 # nltk.download('punkt')  
 import contractions
 
+try:
+    from .nm_aligner import align_segments_nm, empty_alignment_statistics, print_alignment_metrics
+except ImportError:
+    from nm_aligner import align_segments_nm, empty_alignment_statistics, print_alignment_metrics
+
+MAX_SOURCE_GROUP = 7
+MAX_TARGET_GROUP = 7
+
 
 
 
@@ -237,6 +245,15 @@ def align_segments(segments_ch, segments_en):
         list of tuple: Lista alineada de pares (segmento_ch, segmento_en).
     """
 
+    aligned, _, statistics = align_segments_nm(
+        segments_ch, segments_en, model,
+        max_source_group=MAX_SOURCE_GROUP,
+        max_target_group=MAX_TARGET_GROUP,
+        skip_penalty=globals().get("skip_penalty", -0.5),
+    )
+    return aligned, statistics
+
+    # Legacy implementation retained below for reference.
     # Generar embeddings normalizados
     vecs_ch = model.encode(segments_ch, normalize_embeddings=True)
     vecs_en = model.encode(segments_en, normalize_embeddings=True)
@@ -398,6 +415,8 @@ def labse_similarity(text1, text2):
     return float(np.dot(vec1, vec2.T))
 
 def calculate_and_print_metrics(global_stats, total_elapsed):
+    print_alignment_metrics(global_stats, total_elapsed)
+    return
     """
     Calcula métricas derivadas y las imprime, ofreciendo un resumen del proceso de alineamiento.
 
@@ -466,11 +485,7 @@ def process_all_files(input_dir=".", output_file="final_default.txt"):
     all_aligned = []
 
 
-    global_stats = {
-            "1-1": 0, "1-2": 0, "2-1": 0, "1-3": 0, "3-1": 0, "1-4": 0, "4-1": 0,
-            "skip_ch": 0, "skip_en": 0,
-            "total_segments_ch": 0, "total_segments_en": 0
-        }
+    global_stats = empty_alignment_statistics(MAX_SOURCE_GROUP, MAX_TARGET_GROUP)
 
     with open(output_file, 'w', encoding='utf-8') as fout:
         for path_ch, path_en in pairs:
@@ -482,8 +497,8 @@ def process_all_files(input_dir=".", output_file="final_default.txt"):
             # Alineación inicial
             aligned, file_stats = align_segments(seg_ch, seg_en) 
             
-            for key in global_stats:
-                global_stats[key] += file_stats.get(key, 0)
+            for key, value in file_stats.items():
+                global_stats[key] = global_stats.get(key, 0) + value
                 
             for ch_sub, en_sub in aligned:
                 fout.write(f"{ch_sub} ; {en_sub}\n")
@@ -513,11 +528,7 @@ if __name__ == '__main__':
     word_set = set(words.words())
     
     
-    global_total_stats = {
-        "1-1": 0, "1-2": 0, "2-1": 0, "1-3": 0, "3-1": 0, "1-4": 0, "4-1": 0,
-        "skip_ch": 0, "skip_en": 0,
-        "total_segments_ch": 0, "total_segments_en": 0
-    }
+    global_total_stats = empty_alignment_statistics(MAX_SOURCE_GROUP, MAX_TARGET_GROUP)
     
             
     output_dir = os.path.join("data", "condor", "processed")
