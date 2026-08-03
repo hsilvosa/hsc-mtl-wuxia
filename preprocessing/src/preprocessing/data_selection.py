@@ -2,11 +2,11 @@ import pandas as pd
 import numpy as np
 import glob
 import matplotlib.pyplot as plt
-from datasets import load_from_disk
 from pathlib import Path
 import argparse
 import sys
 import re
+import random
 
 
 # Rutas relativas a la ubicación del script (.../data/src/preprocessing/)
@@ -21,6 +21,43 @@ MIN_SCORE_THRESHOLD = 20.0
 LOW_QUANTILE = 1 / 3
 HIGH_QUANTILE = 2 / 3
 RANDOM_SEED = 42
+
+
+def load_local_dataset(path):
+    """Carga datasets locales evitando certificados corruptos de Windows."""
+    if sys.platform != 'win32':
+        from datasets import load_from_disk
+
+        return load_from_disk(str(path))
+
+    import certifi
+    import ssl
+
+    original_create_default_context = ssl.create_default_context
+
+    def create_certifi_context(
+        purpose=ssl.Purpose.SERVER_AUTH,
+        *,
+        cafile=None,
+        capath=None,
+        cadata=None,
+    ):
+        if cafile is None and capath is None and cadata is None:
+            cafile = certifi.where()
+        return original_create_default_context(
+            purpose,
+            cafile=cafile,
+            capath=capath,
+            cadata=cadata,
+        )
+
+    ssl.create_default_context = create_certifi_context
+    try:
+        from datasets import load_from_disk
+    finally:
+        ssl.create_default_context = original_create_default_context
+
+    return load_from_disk(str(path))
 
 
 
@@ -161,10 +198,38 @@ def perform_balanced_sampling(df, k_target):
         & (df['variance_score'] <= variance_low)
     )
     intermediate_mask = df['variance_score'] >= variance_high
-    easy_mask = (
+    strict_easy_mask = (
         (df['mean_score'] >= mean_high)
         & (df['variance_score'] <= variance_low)
     )
+
+    base_target, remainder = divmod(k_target, 3)
+    targets = {
+        difficulty_bin: base_target + (1 if difficulty_bin < remainder else 0)
+        for difficulty_bin in (0, 1, 2)
+    }
+
+    # Completa el estrato facil sin duplicados relajando solo la varianza.
+    strict_easy_count = int(strict_easy_mask.sum())
+    easy_target = targets[2]
+    if strict_easy_count < easy_target:
+        easy_pool = df.loc[
+            (df['mean_score'] >= mean_high) & ~intermediate_mask
+        ].nsmallest(easy_target, 'variance_score')
+        if len(easy_pool) < easy_target:
+            raise ValueError(
+                f"Solo hay {len(easy_pool)} muestras faciles unicas "
+                f"disponibles para un objetivo de {easy_target}."
+            )
+        easy_mask = df.index.isin(easy_pool.index)
+        effective_variance_limit = easy_pool['variance_score'].max()
+        print(
+            f"   -> Estrato facil ampliado: {strict_easy_count} candidatas "
+            f"estrictas; {easy_target} candidatas finales con "
+            f"varianza <= {effective_variance_limit:.4f}."
+        )
+    else:
+        easy_mask = strict_easy_mask
 
     candidates = []
     for difficulty_bin, mask in (
@@ -193,21 +258,30 @@ def perform_balanced_sampling(df, k_target):
             "variación en los datos."
         )
 
-    base_target, remainder = divmod(k_target, 3)
+    target_counts = pd.Series(targets)
+    insufficient_bins = counts[counts < target_counts]
+    if not insufficient_bins.empty:
+        raise ValueError(
+            "No hay suficientes muestras para completar los estratos: "
+            f"{insufficient_bins.to_dict()}. Objetivos: {targets}."
+        )
+
     sampled_strata = []
     for difficulty_bin in (0, 1, 2):
-        target = base_target + (1 if difficulty_bin < remainder else 0)
+        target = targets[difficulty_bin]
         stratum = df_candidates[
             df_candidates['difficulty_bin'] == difficulty_bin
         ]
         sampled_strata.append(
             stratum.sample(
-                n=min(len(stratum), target),
+                n=target,
                 random_state=RANDOM_SEED,
             )
         )
 
     df_balanced = pd.concat(sampled_strata, ignore_index=False)
+    if df_balanced['id'].duplicated().any():
+        raise ValueError("La seleccion contiene identificadores duplicados.")
     print(
         f"   -> Objetivo máximo: {k_target} muestras "
         f"(semilla {RANDOM_SEED})."
@@ -243,6 +317,55 @@ def inspect_data(df_selected, raw_ds):
     
 
 
+def split_selected_indices(df_selected):
+    """Divide la seleccion 80/10/10 manteniendo equilibrados los estratos."""
+    split_sizes = {
+        'train': int(len(df_selected) * 0.8),
+        'validation': int(len(df_selected) * 0.1),
+    }
+    split_sizes['test'] = len(df_selected) - sum(split_sizes.values())
+
+    bins = (0, 1, 2)
+    indices_by_bin = {}
+    for difficulty_bin in bins:
+        stratum = df_selected[df_selected['difficulty_bin'] == difficulty_bin]
+        indices_by_bin[difficulty_bin] = (
+            stratum.sample(frac=1.0, random_state=RANDOM_SEED + difficulty_bin)
+            ['id']
+            .astype(int)
+            .tolist()
+        )
+
+    result = {split: [] for split in split_sizes}
+    offsets = {difficulty_bin: 0 for difficulty_bin in bins}
+    for split_number, (split, split_size) in enumerate(split_sizes.items()):
+        base_size, remainder = divmod(split_size, len(bins))
+        for position, difficulty_bin in enumerate(bins):
+            start = offsets[difficulty_bin]
+            if split_number == len(split_sizes) - 1:
+                size = len(indices_by_bin[difficulty_bin]) - start
+            else:
+                size = base_size + (1 if position < remainder else 0)
+            end = start + size
+            result[split].extend(indices_by_bin[difficulty_bin][start:end])
+            offsets[difficulty_bin] = end
+        random.Random(RANDOM_SEED + 100 + split_number).shuffle(result[split])
+
+    all_indices = [index for indices in result.values() for index in indices]
+    sizes_are_correct = all(
+        len(result[split]) == expected_size
+        for split, expected_size in split_sizes.items()
+    )
+    if (
+        not sizes_are_correct
+        or len(all_indices) != len(df_selected)
+        or len(set(all_indices)) != len(all_indices)
+    ):
+        raise ValueError("Las particiones no contienen exactamente los IDs seleccionados.")
+
+    return result
+
+
 def print_table_statistics(df_balanced):
     print("\n" + "="*50)
     print("ESTADÍSTICAS PARA LA TABLA (RANGOS CHRF)")
@@ -273,6 +396,12 @@ def print_table_statistics(df_balanced):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--mode', type=str, default='execute', choices=['execute', 'study'])
+    parser.add_argument(
+        '--output_dir',
+        type=str,
+        default=None,
+        help='Directorio de salida para el modo execute.',
+    )
     args = parser.parse_args()
 
     print(f"=== MODO: {args.mode.upper()} ===")
@@ -300,13 +429,25 @@ def main():
     selected_indices = df_selected['id'].values
     print(f"Selección final: {len(selected_indices)} muestras.")
 
-    # 5. Dataset Original
-    print(f"\nCargando dataset original...")
-    raw_ds = load_from_disk(str(ORIGINAL_DATASET_PATH))
+    # 5. El dataset original solo es imprescindible para guardar la seleccion.
+    # En modo estudio se usa exclusivamente para mostrar ejemplos cualitativos.
+    raw_ds = None
+    try:
+        print(f"\nCargando dataset original...")
+        raw_ds = load_local_dataset(ORIGINAL_DATASET_PATH)
+    except Exception as exc:
+        if args.mode == 'execute':
+            raise
+        print(
+            "\nAviso: no se pudo cargar el dataset original; "
+            "se omite la inspeccion de ejemplos."
+        )
+        print(f"Motivo: {exc}")
 
     if args.mode == 'study':
             print_table_statistics(df_selected)
-            inspect_data(df_selected, raw_ds)
+            if raw_ds is not None:
+                inspect_data(df_selected, raw_ds)
             
             # Configurar figura con 2 paneles (Izquierda: Original, Derecha: Final)
             fig, axes = plt.subplots(1, 2, figsize=(16, 6))
@@ -328,11 +469,24 @@ def main():
             plt.show()
     
     elif args.mode == 'execute':
-        new_train = raw_ds['train'].select(selected_indices)
-        raw_ds['train'] = new_train
-        output_path = REPO_DIR / "processed_data" / f"wuxia_selected_{len(new_train)}"
+        split_indices = split_selected_indices(df_selected)
+        original_train = raw_ds['train']
+        raw_ds['train'] = original_train.select(split_indices['train'])
+        raw_ds['validation'] = original_train.select(split_indices['validation'])
+        raw_ds['test'] = original_train.select(split_indices['test'])
+        output_path = (
+            Path(args.output_dir)
+            if args.output_dir
+            else REPO_DIR / "processed_data" / "wuxia_selected_100k"
+        )
+        if output_path.exists():
+            raise FileExistsError(
+                f"El directorio de salida ya existe: {output_path}. "
+                "Usa --output_dir con una ruta nueva."
+            )
         raw_ds.save_to_disk(str(output_path))
         print(f"Guardado en: {output_path}")
+        print({split: len(dataset) for split, dataset in raw_ds.items()})
 
     
 if __name__ == "__main__":

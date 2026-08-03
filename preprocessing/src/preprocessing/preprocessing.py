@@ -4,8 +4,44 @@ import random
 import unicodedata
 from pathlib import Path
 import pandas as pd
-from datasets import Dataset, DatasetDict
 import string
+import ssl
+import sys
+
+
+def import_dataset_classes():
+    if sys.platform != 'win32':
+        from datasets import Dataset, DatasetDict
+
+        return Dataset, DatasetDict
+
+    import certifi
+
+    original_create_default_context = ssl.create_default_context
+
+    def create_certifi_context(
+        purpose=ssl.Purpose.SERVER_AUTH,
+        *,
+        cafile=None,
+        capath=None,
+        cadata=None,
+    ):
+        if cafile is None and capath is None and cadata is None:
+            cafile = certifi.where()
+        return original_create_default_context(
+            purpose,
+            cafile=cafile,
+            capath=capath,
+            cadata=cadata,
+        )
+
+    ssl.create_default_context = create_certifi_context
+    try:
+        from datasets import Dataset, DatasetDict
+    finally:
+        ssl.create_default_context = original_create_default_context
+
+    return Dataset, DatasetDict
 
 # Lista de puntuación a conservar (puedes ajustarla si quieres menos)
 ALLOWED_PUNCT = set(string.punctuation) | {"，", "。", "！", "？", "、", "；", "：", "“", "”", "‘", "’", "—", "…"}
@@ -66,6 +102,8 @@ def load_and_clean(input_path: Path, sep=";"):
     return pd.DataFrame({"zh": srcs, "en": tgts})
 
 def main():
+    Dataset, DatasetDict = import_dataset_classes()
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--input_txt", type=str, required=True)
     parser.add_argument("--output_dir", type=str, required=True)
