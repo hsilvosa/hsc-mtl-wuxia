@@ -12,7 +12,7 @@ from nltk.corpus import words
 
 try:
     from .nm_aligner import align_segments_nm
-except ImportError:
+except ImportError:  # Allow direct execution from this directory.
     from nm_aligner import align_segments_nm
 
 MAX_SOURCE_GROUP = 7
@@ -23,7 +23,7 @@ def get_device():
     return torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
-# Modelo LaBSE
+# Model LaBSE
 device = get_device()
 print(f"Usando dispositivo: {device}")
 model = SentenceTransformer('sentence-transformers/LaBSE', device=str(device))
@@ -57,7 +57,7 @@ def fix_broken_words(text):
 
 
 def load_and_clean_text(path_ch, path_en):
-    # chino
+    # Chinese
     lines = []
     with open(path_ch, 'r', encoding='utf-8', errors='ignore') as f:
         for L in f:
@@ -66,7 +66,7 @@ def load_and_clean_text(path_ch, path_en):
             lines.append(s.replace("&amp;amp; {}", ""))
     text_ch = re.sub(r'（[^）]*）', '', " ".join(lines))
 
-    # inglés
+    # English
     lines = []
     with open(path_en, 'r', encoding='utf-8', errors='ignore') as f:
         for L in f:
@@ -85,7 +85,7 @@ def split_quotes(text, quote_chars='"“”'):
 
 
 def segment_text(text_ch, text_en):
-    # chino: split en cada 。！？；：:
+    # Chinese: split in each 。！？；：:
     ch_tokens = split_quotes(text_ch)
     seg_ch = []
     for tok in ch_tokens:
@@ -93,7 +93,7 @@ def segment_text(text_ch, text_en):
         for s in re.split(r'(?<=[。！？；：:])', tok):
             if s.strip(): seg_ch.append(s.strip())
 
-    # inglés: split en cada . ! ? : ;
+    # English: split in each . ! ? : ;
     en_tokens = split_quotes(text_en)
     seg_en = []
     for tok in en_tokens:
@@ -107,7 +107,7 @@ def segment_text(text_ch, text_en):
 
 def merge_segments_ch(segments):
     """
-    Une en chino diálogo + narrador cuando el segundo segmento empieza con 说道/问道/…
+    Joins in Chinese dialogue + narrator when the segundo segment starts with 说道/问道/…
     """
     merged, i = [], 0
     tag_re = re.compile(r'(?:说道|问道|答道|喊道|叫道)')
@@ -125,8 +125,8 @@ def merge_segments_ch(segments):
 
 def merge_segments_en(segments):
     """
-    Une en inglés cuando un segmento termina en coma/;/: y el siguiente
-    empieza en minúscula (continuación narrativa dentro de diálogo).
+    Joins in English when to segment ends in comma/;/: and the next
+    starts in lowercase (continuation narrative inside of dialogue).
     """
     merged, i = [], 0
     while i < len(segments):
@@ -156,8 +156,8 @@ def get_embeddings(texts):
 
 def align_segments(segments_ch, segments_en):
     """
-    Alinea con DP permitiendo combinaciones 1-1,1-2,2-1,1-3,3-1,1-4,4-1
-    sin ningún filtro extra.
+    Aligns with DP permitiendo combinations 1-1,1-2,2-1,1-3,3-1,1-4,4-1
+    without no filter extra.
     """
     aligned, _, _ = align_segments_nm(
         segments_ch, segments_en, model,
@@ -172,7 +172,7 @@ def align_segments(segments_ch, segments_en):
     vecs_ch = model.encode(segments_ch, normalize_embeddings=True)
     vecs_en = model.encode(segments_en, normalize_embeddings=True)
 
-    # combinaciones chinos
+    # combinations Chinese
     vecs_ch2 = model.encode([segments_ch[i]+" "+segments_ch[i+1] for i in range(M-1)],
                              normalize_embeddings=True) if M>1 else None
     vecs_ch3 = model.encode([segments_ch[i]+" "+segments_ch[i+1]+" "+segments_ch[i+2]
@@ -180,7 +180,7 @@ def align_segments(segments_ch, segments_en):
     vecs_ch4 = model.encode([segments_ch[i]+" "+segments_ch[i+1]+" "+segments_ch[i+2]+" "+segments_ch[i+3]
                              for i in range(M-3)], normalize_embeddings=True) if M>3 else None
 
-    # combinaciones ingleses
+    # combinations English
     vecs_en2 = model.encode([segments_en[j]+" "+segments_en[j+1] for j in range(N-1)],
                              normalize_embeddings=True) if N>1 else None
     vecs_en3 = model.encode([segments_en[j]+" "+segments_en[j+1]+" "+segments_en[j+2]
@@ -242,7 +242,7 @@ def align_segments(segments_ch, segments_en):
                 if s>DP[i][j]:
                     DP[i][j], back[i][j] = s, ("skip_en", i, j-1)
 
-    # reconstrucción
+    # reconstruction
     aligned = []
     i, j = M, N
     while i>0 or j>0:
@@ -308,4 +308,4 @@ if __name__ == '__main__':
 
     start = time.perf_counter()
     resultados = process_all_files(".")
-    print(f"Terminado en {time.perf_counter()-start:.2f}s con {len(resultados)} segmentos.")
+    print(f"Finished in {time.perf_counter()-start:.2f}s with {len(resultados)} segments.")

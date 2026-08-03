@@ -11,6 +11,14 @@ from nltk.tokenize import sent_tokenize
 from nltk.corpus import words
 # nltk.download('punkt')  
 
+try:
+    from .nm_aligner import align_segments_nm, empty_alignment_statistics, print_alignment_metrics
+except ImportError:
+    from nm_aligner import align_segments_nm, empty_alignment_statistics, print_alignment_metrics
+
+MAX_SOURCE_GROUP = 7
+MAX_TARGET_GROUP = 7
+
 
 
 
@@ -208,6 +216,15 @@ def align_segments(segments_ch, segments_en):
     Alinea segmentos y devuelve texto + puntajes de similitud.
     """
     
+    aligned, scores, statistics = align_segments_nm(
+        segments_ch, segments_en, model,
+        max_source_group=MAX_SOURCE_GROUP,
+        max_target_group=MAX_TARGET_GROUP,
+        skip_penalty=globals().get("skip_penalty", -0.5),
+    )
+    return aligned, scores, statistics
+
+    # Legacy implementation retained below for reference.
     MAX_ALIGNMENT_MULTIPLIER = 7
     global skip_penalty 
 
@@ -321,6 +338,8 @@ def align_segments(segments_ch, segments_en):
 
 
 def calculate_and_print_metrics(global_stats, total_elapsed):
+    print_alignment_metrics(global_stats, total_elapsed)
+    return
     """
     Calcula métricas derivadas y las imprime, incluyendo combinaciones dinámicas K:1 y 1:L.
     """
@@ -400,12 +419,7 @@ def process_all_files(input_dir="."):
     pairs = list_file_pairs(input_dir)
     all_aligned = []
 
-    global_stats = {
-            "1-1": 0, "1-2": 0, "2-1": 0, "1-3": 0, "3-1": 0, "1-4": 0, "4-1": 0,
-            "1-5":0, "5-1":0, "1-6":0, "6-1":0, "1:7":0, "7:1":0,
-            "skip_ch": 0, "skip_en": 0,
-            "total_segments_ch": 0, "total_segments_en": 0
-        }
+    global_stats = empty_alignment_statistics(MAX_SOURCE_GROUP, MAX_TARGET_GROUP)
 
     output_scores_file = "final_awe_similitudes_3.txt"
 
@@ -423,9 +437,8 @@ def process_all_files(input_dir="."):
             # Alineación inicial (ahora desempaquetamos 3 valores)
             aligned, scores, file_stats = align_segments(seg_ch, seg_en) 
             
-            for key in global_stats:
-                if key in file_stats:
-                    global_stats[key] += file_stats.get(key, 0)
+            for key, value in file_stats.items():
+                global_stats[key] = global_stats.get(key, 0) + value
             
             # Iteramos sobre pares y puntajes al mismo tiempo
             for (ch_sub, en_sub), score in zip(aligned, scores):

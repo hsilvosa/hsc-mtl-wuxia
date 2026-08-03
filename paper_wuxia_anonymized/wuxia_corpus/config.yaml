@@ -3,8 +3,8 @@
 
 datasets:
   awe:
-    name: "A Wizard's Expedition"
-    full_name: "A Wizard's Expedition (AWE)"
+    name: "A Will Eternal"
+    full_name: "A Will Eternal (AWE)"
     raw_dir: "data/awe/raw"
     segmented_dir: "data/awe/segmented/chapter"
     processed_dir: "data/awe/processed"
@@ -41,22 +41,6 @@ datasets:
       english: "guzhenren_en.txt"
     output_prefix: "final_gu"
     
-  issth:
-    name: "I Shall Seal the Heavens"
-    full_name: "I Shall Seal the Heavens (ISSTH)"
-    raw_dir: "data/issth/raw"
-    segmented_dir: "data/issth/segmented/chapter"
-    processed_dir: "data/issth/processed"
-    source_files:
-      chinese: "issth_ch.txt"
-      english: "issth_en.txt"
-    output_prefix: "final_issth"
-
-alignment:
-  max_source_group: 7
-  max_target_group: 7
-  skip_penalty: -0.5
-  group_size_penalty: 0.0
 
 preprocessing:
   chinese:
@@ -78,6 +62,12 @@ analysis:
   statistics:
     output_dir: "logs"
     format: "json"
+
+alignment:
+  max_source_group: 7
+  max_target_group: 7
+  skip_penalty: -0.5
+  group_size_penalty: 0.0
 
 output:
   logs_dir: "logs"
